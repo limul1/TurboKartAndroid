@@ -8,7 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Recuperer le projet
         uses: actions/checkout@v4
@@ -22,8 +21,10 @@ jobs:
       - name: Installer Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Installer les outils Android
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Installer les composants Android requis
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Installer Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -31,13 +32,29 @@ jobs:
           gradle-version: '8.9'
 
       - name: Extraire le projet
-        run: unzip TurboKart_APK.zip -d extracted
+        run: |
+          unzip -q TurboKart_APK.zip -d extracted
+          echo "Contenu extrait :"
+          find extracted -maxdepth 4 -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" -o -name "gradlew" \) -print
 
       - name: Compiler le jeu
-        run: gradle --no-daemon -p extracted/TurboKart_Android assembleDebug
+        run: |
+          PROJECT_DIR="$(dirname "$(find extracted -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit)")"
+          if [ -z "$PROJECT_DIR" ] || [ "$PROJECT_DIR" = "." ]; then
+            echo "ERREUR: fichier settings.gradle introuvable dans l'archive."
+            find extracted -maxdepth 4 -type f | head -200
+            exit 1
+          fi
+          if [ -f "$PROJECT_DIR/gradlew" ]; then
+            chmod +x "$PROJECT_DIR/gradlew"
+            "$PROJECT_DIR/gradlew" --no-daemon assembleDebug
+          else
+            gradle --no-daemon -p "$PROJECT_DIR" assembleDebug
+          fi
 
       - name: Recuperer le APK
         uses: actions/upload-artifact@v4
         with:
           name: Turbo-Kart-APK
-          path: extracted/TurboKart_Android/app/build/outputs/apk/debug/app-debug.apk
+          path: extracted/**/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
