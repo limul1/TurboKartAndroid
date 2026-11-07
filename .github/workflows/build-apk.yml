@@ -18,7 +18,7 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Configurer Android SDK sans ancien setup-android
+      - name: Configurer Android SDK
         shell: bash
         run: |
           set -euo pipefail
@@ -27,8 +27,7 @@ jobs:
           echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
           SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -n 1)"
           if [ -z "$SDKMANAGER" ]; then
-            echo "sdkmanager introuvable dans $SDK_ROOT/cmdline-tools"
-            find "$SDK_ROOT" -maxdepth 4 -type f | head -100 || true
+            echo "sdkmanager introuvable"
             exit 1
           fi
           yes | "$SDKMANAGER" --licenses >/dev/null || true
@@ -40,19 +39,25 @@ jobs:
           gradle-version: '8.9'
 
       - name: Extraire le projet
+        shell: bash
         run: |
+          set -euo pipefail
           unzip -q TurboKart_APK.zip -d extracted
-          echo "Contenu extrait :"
-          find extracted -maxdepth 5 -type f \\( -name "settings.gradle" -o -name "settings.gradle.kts" -o -name "gradlew" -o -name "CMakeLists.txt" \\) -print
+          echo "Fichiers Gradle trouvés :"
+          find extracted -maxdepth 6 -type f -name 'settings.gradle*' -print
+          echo "Aperçu de l'archive :"
+          find extracted -maxdepth 4 -type f | head -100
 
       - name: Compiler le jeu
         shell: bash
         run: |
           set -euo pipefail
-          SETTINGS_FILE="$(find extracted -type f \\( -name settings.gradle -o -name settings.gradle.kts \\) -print -quit)"
+          SETTINGS_FILE="$(find extracted -type f -name 'settings.gradle' -print -quit)"
           if [ -z "$SETTINGS_FILE" ]; then
-            echo "ERREUR: fichier settings.gradle introuvable dans l'archive."
-            find extracted -maxdepth 5 -type f | head -200
+            SETTINGS_FILE="$(find extracted -type f -name 'settings.gradle.kts' -print -quit)"
+          fi
+          if [ -z "$SETTINGS_FILE" ]; then
+            echo "ERREUR: aucun settings.gradle dans l'archive. Le projet Android manque."
             exit 1
           fi
           PROJECT_DIR="$(dirname "$SETTINGS_FILE")"
