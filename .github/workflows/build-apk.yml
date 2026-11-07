@@ -48,6 +48,40 @@ jobs:
           echo "Aperçu de l'archive :"
           find extracted -maxdepth 4 -type f | head -100
 
+      - name: Corriger la compatibilite Android recente
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root = Path("extracted")
+          gradle_files = list(root.rglob("build.gradle")) + list(root.rglob("build.gradle.kts"))
+          app_gradle = [p for p in gradle_files if p.parent.name == "app"]
+          if not app_gradle:
+              raise SystemExit("Fichier Gradle du module app introuvable")
+          for p in app_gradle:
+              s = p.read_text()
+              if p.name.endswith(".kts"):
+                  s = re.sub(r"targetSdkVersion\\s*\\(?\\s*\\d+\\s*\\)?", "targetSdk = 35", s)
+                  s = re.sub(r"targetSdk\\s*=\\s*\\d+", "targetSdk = 35", s)
+                  if not re.search(r"targetSdk\\s*=", s):
+                      s, n = re.subn(r"(defaultConfig\\s*\\{)", r"\\1\\n        targetSdk = 35", s, count=1)
+              else:
+                  s = re.sub(r"targetSdkVersion\\s*\\(?\\s*\\d+\\s*\\)?", "targetSdkVersion 35", s)
+                  s = re.sub(r"targetSdk\\s*=\\s*\\d+", "targetSdkVersion 35", s)
+                  if not re.search(r"targetSdk(?:Version)?\\s*(?:=|\\s)", s):
+                      s, n = re.subn(r"(defaultConfig\\s*\\{)", r"\\1\\n        targetSdkVersion 35", s, count=1)
+              p.write_text(s)
+              print(f"--- {p} ---")
+              print(s)
+          manifests = list(root.rglob("AndroidManifest.xml"))
+          for p in manifests:
+              s = p.read_text(errors="ignore")
+              s = re.sub(r'android:targetSdkVersion="\\d+"', 'android:targetSdkVersion="35"', s)
+              p.write_text(s)
+          PY
+
       - name: Compiler le jeu
         shell: bash
         run: |
